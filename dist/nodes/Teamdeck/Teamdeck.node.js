@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Teamdeck = void 0;
+const n8n_workflow_1 = require("n8n-workflow");
 class Teamdeck {
     constructor() {
         this.description = {
@@ -34,8 +35,8 @@ class Teamdeck {
                             value: 'project',
                         },
                         {
-                            name: 'Timesheet',
-                            value: 'timesheet',
+                            name: 'Time-entries',
+                            value: 'time-entries',
                         },
                     ],
                     default: 'project',
@@ -60,10 +61,10 @@ class Teamdeck {
                             action: 'Create a project',
                         },
                         {
-                            name: 'Get All',
+                            name: 'Get Many',
                             value: 'getAll',
-                            description: 'Get all projects',
-                            action: 'Get all projects',
+                            description: 'Get many projects',
+                            action: 'Get many projects',
                         },
                     ],
                     default: 'getAll',
@@ -113,7 +114,7 @@ class Teamdeck {
                         {
                             displayName: 'Color',
                             name: 'color',
-                            type: 'string',
+                            type: 'color',
                             default: '#2196F3',
                             description: 'Project color (hex code)',
                         },
@@ -127,7 +128,7 @@ class Teamdeck {
                     displayOptions: {
                         show: {
                             resource: [
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
@@ -135,14 +136,14 @@ class Teamdeck {
                         {
                             name: 'Create',
                             value: 'create',
-                            description: 'Create a timesheet entry',
-                            action: 'Create a timesheet entry',
+                            description: 'Create a time-entry',
+                            action: 'Create a time-entry',
                         },
                         {
-                            name: 'Get All',
+                            name: 'Get Many',
                             value: 'getAll',
-                            description: 'Get all timesheet entries',
-                            action: 'Get all timesheet entries',
+                            description: 'Get many time-entry entries',
+                            action: 'Get many time-entry entries',
                         },
                     ],
                     default: 'getAll',
@@ -158,7 +159,7 @@ class Teamdeck {
                                 'create',
                             ],
                             resource: [
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
@@ -176,7 +177,7 @@ class Teamdeck {
                                 'create',
                             ],
                             resource: [
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
@@ -194,12 +195,12 @@ class Teamdeck {
                                 'create',
                             ],
                             resource: [
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
                     default: '',
-                    description: 'Start date and time of the timesheet entry',
+                    description: 'Start date and time of the time-entries entry',
                 },
                 {
                     displayName: 'Duration (Hours)',
@@ -216,7 +217,7 @@ class Teamdeck {
                                 'create',
                             ],
                             resource: [
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
@@ -235,7 +236,7 @@ class Teamdeck {
                                 'getAll',
                             ],
                             resource: [
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
@@ -281,7 +282,7 @@ class Teamdeck {
                             ],
                             resource: [
                                 'project',
-                                'timesheet',
+                                'time-entries',
                             ],
                         },
                     },
@@ -299,7 +300,7 @@ class Teamdeck {
                             ],
                             resource: [
                                 'project',
-                                'timesheet',
+                                'time-entries',
                             ],
                             returnAll: [
                                 false,
@@ -308,7 +309,6 @@ class Teamdeck {
                     },
                     typeOptions: {
                         minValue: 1,
-                        maxValue: 100,
                     },
                     default: 50,
                     description: 'Max number of results to return',
@@ -321,6 +321,7 @@ class Teamdeck {
         const resource = this.getNodeParameter('resource', 0);
         const operation = this.getNodeParameter('operation', 0);
         async function getAllResults(that, endpoint, qs = {}) {
+            const credentials = await that.getCredentials('teamdeckApi');
             const returnAll = that.getNodeParameter('returnAll', 0);
             const limit = returnAll ? -1 : that.getNodeParameter('limit', 0);
             let results = [];
@@ -332,6 +333,9 @@ class Teamdeck {
                         method: 'GET',
                         url: `https://api.teamdeck.io/v1/${endpoint}`,
                         qs,
+                        headers: {
+                            'X-Api-Key': credentials.apiKey,
+                        },
                         json: true,
                         resolveWithFullResponse: true,
                     });
@@ -350,7 +354,7 @@ class Teamdeck {
                 return results;
             }
             catch (error) {
-                throw new Error(`Teamdeck Error: ${error.message}`);
+                throw new n8n_workflow_1.NodeApiError(that.getNode(), error);
             }
         }
         if (resource === 'project') {
@@ -363,18 +367,60 @@ class Teamdeck {
                 })));
             }
             else if (operation === 'create') {
+                const credentials = await this.getCredentials('teamdeckApi');
+                const name = this.getNodeParameter('name', 0);
+                const additionalFields = this.getNodeParameter('additionalFields', 0, {});
+                const body = {
+                    name,
+                    ...additionalFields,
+                };
+                const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+                    method: 'POST',
+                    url: 'https://api.teamdeck.io/v1/projects',
+                    body,
+                    headers: {
+                        'X-Api-Key': credentials.apiKey,
+                    },
+                    json: true,
+                });
+                returnData.push({
+                    json: response.data || response,
+                });
             }
         }
-        else if (resource === 'timesheet') {
+        else if (resource === 'time-entries') {
             if (operation === 'getAll') {
                 const filters = this.getNodeParameter('filters', 0, {});
                 const qs = { ...filters };
-                const results = await getAllResults(this, 'time_entries', qs);
+                const results = await getAllResults(this, 'time-entries', qs);
                 returnData.push.apply(returnData, results.map(item => ({
                     json: item,
                 })));
             }
             else if (operation === 'create') {
+                const credentials = await this.getCredentials('teamdeckApi');
+                const projectId = this.getNodeParameter('projectId', 0);
+                const userId = this.getNodeParameter('userId', 0);
+                const startDate = this.getNodeParameter('startDate', 0);
+                const duration = this.getNodeParameter('duration', 0);
+                const body = {
+                    project_id: projectId,
+                    user_id: userId,
+                    start_date: startDate,
+                    duration: duration,
+                };
+                const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+                    method: 'POST',
+                    url: 'https://api.teamdeck.io/v1/time-entries',
+                    body,
+                    headers: {
+                        'X-Api-Key': credentials.apiKey,
+                    },
+                    json: true,
+                });
+                returnData.push({
+                    json: response.data || response,
+                });
             }
         }
         return [returnData];

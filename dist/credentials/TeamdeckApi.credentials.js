@@ -5,16 +5,43 @@ class TeamdeckApi {
     constructor() {
         this.name = 'teamdeckApi';
         this.displayName = 'Teamdeck API';
-        this.documentationUrl = 'https://help.teamdeck.io/en/articles/4403393-teamdeck-api';
+        this.documentationUrl = 'https://teamdeck.io/api-documentation';
         this.properties = [
             {
-                displayName: 'API Token',
-                name: 'apiToken',
+                displayName: 'API Key',
+                name: 'apiKey',
                 type: 'string',
+                typeOptions: {
+                    password: true,
+                },
                 default: '',
                 required: true,
             },
         ];
+        this.authenticate = {
+            type: 'generic',
+            properties: {
+                headers: {
+                    'X-Api-Key': '={{$credentials.apiKey}}'
+                },
+            },
+        };
+        this.test = {
+            request: {
+                url: 'https://api.teamdeck.io/v1/me',
+                method: 'GET',
+            },
+            rules: [
+                {
+                    type: 'responseSuccessBody',
+                    properties: {
+                        message: 'API credentials are valid',
+                        key: 'status',
+                        value: 200,
+                    },
+                },
+            ],
+        };
     }
 }
 exports.TeamdeckApi = TeamdeckApi;

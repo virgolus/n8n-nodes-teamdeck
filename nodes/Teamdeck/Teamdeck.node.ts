@@ -3,6 +3,7 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	NodeApiError,
 } from 'n8n-workflow';
 
 export class Teamdeck implements INodeType {
@@ -37,8 +38,8 @@ export class Teamdeck implements INodeType {
 						value: 'project',
 					},
 					{
-						name: 'Timesheet',
-						value: 'timesheet',
+						name: 'Time-entries',
+						value: 'time-entries',
 					},
 				],
 				default: 'project',
@@ -64,10 +65,10 @@ export class Teamdeck implements INodeType {
 						action: 'Create a project',
 					},
 					{
-						name: 'Get All',
+						name: 'Get Many',
 						value: 'getAll',
-						description: 'Get all projects',
-						action: 'Get all projects',
+						description: 'Get many projects',
+						action: 'Get many projects',
 					},
 				],
 				default: 'getAll',
@@ -118,13 +119,13 @@ export class Teamdeck implements INodeType {
 					{
 						displayName: 'Color',
 						name: 'color',
-						type: 'string',
+						type: 'color',
 						default: '#2196F3',
 						description: 'Project color (hex code)',
 					},
 				],
 			},
-			// Timesheet Operations
+			// time-entries Operations
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -133,7 +134,7 @@ export class Teamdeck implements INodeType {
 				displayOptions: {
 					show: {
 						resource: [
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
@@ -141,19 +142,19 @@ export class Teamdeck implements INodeType {
 					{
 						name: 'Create',
 						value: 'create',
-						description: 'Create a timesheet entry',
-						action: 'Create a timesheet entry',
+						description: 'Create a time-entry',
+						action: 'Create a time-entry',
 					},
 					{
-						name: 'Get All',
+						name: 'Get Many',
 						value: 'getAll',
-						description: 'Get all timesheet entries',
-						action: 'Get all timesheet entries',
+						description: 'Get many time-entry entries',
+						action: 'Get many time-entry entries',
 					},
 				],
 				default: 'getAll',
 			},
-			// Timesheet Fields
+			// time-entries Fields
 			{
 				displayName: 'Project ID',
 				name: 'projectId',
@@ -165,7 +166,7 @@ export class Teamdeck implements INodeType {
 							'create',
 						],
 						resource: [
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
@@ -183,7 +184,7 @@ export class Teamdeck implements INodeType {
 							'create',
 						],
 						resource: [
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
@@ -201,12 +202,12 @@ export class Teamdeck implements INodeType {
 							'create',
 						],
 						resource: [
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
 				default: '',
-				description: 'Start date and time of the timesheet entry',
+				description: 'Start date and time of the time-entries entry',
 			},
 			{
 				displayName: 'Duration (Hours)',
@@ -223,14 +224,14 @@ export class Teamdeck implements INodeType {
 							'create',
 						],
 						resource: [
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
 				default: 1,
 				description: 'Duration in hours',
 			},
-			// Filter Fields for Timesheet GetAll
+			// Filter Fields for time-entries GetAll
 			{
 				displayName: 'Filters',
 				name: 'filters',
@@ -243,7 +244,7 @@ export class Teamdeck implements INodeType {
 							'getAll',
 						],
 						resource: [
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
@@ -289,7 +290,7 @@ export class Teamdeck implements INodeType {
 						],
 						resource: [
 							'project',
-							'timesheet',
+							'time-entries',
 						],
 					},
 				},
@@ -307,7 +308,7 @@ export class Teamdeck implements INodeType {
 						],
 						resource: [
 							'project',
-							'timesheet',
+							'time-entries',
 						],
 						returnAll: [
 							false,
@@ -316,7 +317,6 @@ export class Teamdeck implements INodeType {
 				},
 				typeOptions: {
 					minValue: 1,
-					maxValue: 100,
 				},
 				default: 50,
 				description: 'Max number of results to return',
@@ -335,6 +335,7 @@ export class Teamdeck implements INodeType {
 			endpoint: string,
 			qs: any = {},
 		): Promise<any[]> {
+			const credentials = await that.getCredentials('teamdeckApi');
 			const returnAll = that.getNodeParameter('returnAll', 0) as boolean;
 			const limit = returnAll ? -1 : (that.getNodeParameter('limit', 0) as number);
 			let results: any[] = [];
@@ -348,6 +349,9 @@ export class Teamdeck implements INodeType {
 						method: 'GET',
 						url: `https://api.teamdeck.io/v1/${endpoint}`,
 						qs,
+						headers: {
+							'X-Api-Key': credentials.apiKey,
+						},
 						json: true,
 						resolveWithFullResponse: true, // Per ottenere gli headers
 					});
@@ -372,7 +376,7 @@ export class Teamdeck implements INodeType {
 
 				return results;
 			} catch (error) {
-				throw new Error(`Teamdeck Error: ${error.message}`);
+				throw new NodeApiError(that.getNode(), error);
 			}
 		}
 
@@ -392,10 +396,34 @@ export class Teamdeck implements INodeType {
 				})));
 			}
 			else if (operation === 'create') {
-				// ... (create project rimane lo stesso)
+				const credentials = await this.getCredentials('teamdeckApi');
+				const name = this.getNodeParameter('name', 0) as string;
+				const additionalFields = this.getNodeParameter('additionalFields', 0, {}) as {
+					description?: string;
+					color?: string;
+				};
+
+				const body = {
+					name,
+					...additionalFields,
+				};
+
+				const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'POST',
+					url: 'https://api.teamdeck.io/v1/projects',
+					body,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+					json: true,
+				});
+
+				returnData.push({
+					json: response.data || response,
+				});
 			}
 		}
-		else if (resource === 'timesheet') {
+		else if (resource === 'time-entries') {
 			if (operation === 'getAll') {
 				const filters = this.getNodeParameter('filters', 0, {}) as {
 					startDate?: string;
@@ -406,13 +434,38 @@ export class Teamdeck implements INodeType {
 
 				const qs: any = { ...filters };
 				
-				const results = await getAllResults(this, 'time_entries', qs);
+				const results = await getAllResults(this, 'time-entries', qs);
 				returnData.push.apply(returnData, results.map(item => ({
 					json: item,
 				})));
 			}
 			else if (operation === 'create') {
-				// ... (create timesheet rimane lo stesso)
+				const credentials = await this.getCredentials('teamdeckApi');
+				const projectId = this.getNodeParameter('projectId', 0) as string;
+				const userId = this.getNodeParameter('userId', 0) as string;
+				const startDate = this.getNodeParameter('startDate', 0) as string;
+				const duration = this.getNodeParameter('duration', 0) as number;
+
+				const body = {
+					project_id: projectId,
+					user_id: userId,
+					start_date: startDate,
+					duration: duration,
+				};
+
+				const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'POST',
+					url: 'https://api.teamdeck.io/v1/time-entries',
+					body,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+					json: true,
+				});
+
+				returnData.push({
+					json: response.data || response,
+				});
 			}
 		}
 
