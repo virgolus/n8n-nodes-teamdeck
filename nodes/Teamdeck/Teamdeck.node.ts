@@ -4,6 +4,7 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	NodeApiError,
+	IDataObject,
 } from 'n8n-workflow';
 
 export class Teamdeck implements INodeType {
@@ -65,10 +66,28 @@ export class Teamdeck implements INodeType {
 						action: 'Create a project',
 					},
 					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete a project',
+						action: 'Delete a project',
+					},
+					{
+						name: 'Get',
+						value: 'get',
+						description: 'Get a single project',
+						action: 'Get a project',
+					},
+					{
 						name: 'Get Many',
 						value: 'getAll',
 						description: 'Get many projects',
 						action: 'Get many projects',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						description: 'Update a project',
+						action: 'Update a project',
 					},
 				],
 				default: 'getAll',
@@ -146,10 +165,28 @@ export class Teamdeck implements INodeType {
 						action: 'Create a time-entry',
 					},
 					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete a time-entry',
+						action: 'Delete a time-entry',
+					},
+					{
+						name: 'Get',
+						value: 'get',
+						description: 'Get a single time-entry',
+						action: 'Get a time-entry',
+					},
+					{
 						name: 'Get Many',
 						value: 'getAll',
-						description: 'Get many time-entry entries',
-						action: 'Get many time-entry entries',
+						description: 'Get many time-entries',
+						action: 'Get many time-entries',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						description: 'Update a time-entry',
+						action: 'Update a time-entry',
 					},
 				],
 				default: 'getAll',
@@ -320,7 +357,21 @@ export class Teamdeck implements INodeType {
 				},
 				default: 50,
 				description: 'Max number of results to return',
-			}
+			},
+			{
+				displayName: 'Time Entry ID',
+				name: 'timeEntryId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['time-entries'],
+						operation: ['delete', 'get', 'update'],
+					},
+				},
+				default: '',
+				description: 'ID of the time entry',
+			},
 		],
 	};
 
@@ -421,6 +472,52 @@ export class Teamdeck implements INodeType {
 				returnData.push({
 					json: response.data || response,
 				});
+			}
+			else if (operation === 'delete') {
+				const credentials = await this.getCredentials('teamdeckApi');
+				const projectId = this.getNodeParameter('projectId', 0) as string;
+				
+				await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'DELETE',
+					url: `https://api.teamdeck.io/v1/projects/${projectId}`,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+				});
+
+				returnData.push({ json: { success: true } });
+			}
+			else if (operation === 'get') {
+				const credentials = await this.getCredentials('teamdeckApi');
+				const projectId = this.getNodeParameter('projectId', 0) as string;
+				
+				const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'GET',
+					url: `https://api.teamdeck.io/v1/projects/${projectId}`,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+					json: true,
+				});
+
+				returnData.push({ json: response.data || response });
+			}
+			else if (operation === 'update') {
+				const credentials = await this.getCredentials('teamdeckApi');
+				const projectId = this.getNodeParameter('projectId', 0) as string;
+				const updateFields = this.getNodeParameter('updateFields', 0, {}) as IDataObject;
+				
+				const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'PUT',
+					url: `https://api.teamdeck.io/v1/projects/${projectId}`,
+					body: updateFields,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+					json: true,
+				});
+
+				returnData.push({ json: response.data || response });
 			}
 		}
 		else if (resource === 'time-entries') {
