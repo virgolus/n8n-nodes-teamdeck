@@ -39,7 +39,7 @@ export class Teamdeck implements INodeType {
 						value: 'project',
 					},
 					{
-						name: 'Time-entries',
+						name: 'Time-Entry',
 						value: 'time-entries',
 					},
 				],
@@ -162,31 +162,31 @@ export class Teamdeck implements INodeType {
 						name: 'Create',
 						value: 'create',
 						description: 'Create a time-entry',
-						action: 'Create a time-entry',
+						action: 'Create a time entry',
 					},
 					{
 						name: 'Delete',
 						value: 'delete',
 						description: 'Delete a time-entry',
-						action: 'Delete a time-entry',
+						action: 'Delete a time entry',
 					},
 					{
 						name: 'Get',
 						value: 'get',
 						description: 'Get a single time-entry',
-						action: 'Get a time-entry',
+						action: 'Get a time entry',
 					},
 					{
 						name: 'Get Many',
 						value: 'getAll',
 						description: 'Get many time-entries',
-						action: 'Get many time-entries',
+						action: 'Get many time entries',
 					},
 					{
 						name: 'Update',
 						value: 'update',
 						description: 'Update a time-entry',
-						action: 'Update a time-entry',
+						action: 'Update a time entry',
 					},
 				],
 				default: 'getAll',
@@ -194,7 +194,7 @@ export class Teamdeck implements INodeType {
 			// time-entries Fields
 			{
 				displayName: 'Project ID',
-				name: 'projectId',
+				name: 'project_id',
 				type: 'string',
 				required: true,
 				displayOptions: {
@@ -211,8 +211,8 @@ export class Teamdeck implements INodeType {
 				description: 'ID of the project',
 			},
 			{
-				displayName: 'User ID',
-				name: 'userId',
+				displayName: 'Resource ID',
+				name: 'resource_id',
 				type: 'string',
 				required: true,
 				displayOptions: {
@@ -226,11 +226,11 @@ export class Teamdeck implements INodeType {
 					},
 				},
 				default: '',
-				description: 'ID of the user',
+				description: 'ID of the resource',
 			},
 			{
 				displayName: 'Start Date',
-				name: 'startDate',
+				name: 'start_date',
 				type: 'dateTime',
 				required: true,
 				displayOptions: {
@@ -244,16 +244,12 @@ export class Teamdeck implements INodeType {
 					},
 				},
 				default: '',
-				description: 'Start date and time of the time-entries entry',
+				description: 'Start date of the entry (format: YYYY-MM-DD)',
 			},
 			{
-				displayName: 'Duration (Hours)',
-				name: 'duration',
-				type: 'number',
-				typeOptions: {
-					minValue: 0.25,
-					maxValue: 24,
-				},
+				displayName: 'End Date',
+				name: 'end_date',
+				type: 'dateTime',
 				required: true,
 				displayOptions: {
 					show: {
@@ -265,8 +261,26 @@ export class Teamdeck implements INodeType {
 						],
 					},
 				},
-				default: 1,
-				description: 'Duration in hours',
+				default: '',
+				description: 'End date of the entry (format: YYYY-MM-DD)',
+			},
+			{
+				displayName: 'Minutes',
+				name: 'minutes',
+				type: 'number',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
+					},
+				},
+				default: 60,
+				description: 'Duration in minutes',
 			},
 			// Filter Fields for time-entries GetAll
 			{
@@ -288,28 +302,28 @@ export class Teamdeck implements INodeType {
 				options: [
 					{
 						displayName: 'Start Date',
-						name: 'startDate',
+						name: 'start_date',
 						type: 'dateTime',
 						default: '',
 						description: 'Filter by start date',
 					},
 					{
 						displayName: 'End Date',
-						name: 'endDate',
+						name: 'end_date',
 						type: 'dateTime',
 						default: '',
 						description: 'Filter by end date',
 					},
 					{
 						displayName: 'Project ID',
-						name: 'projectId',
+						name: 'project_id',
 						type: 'string',
 						default: '',
 						description: 'Filter by project ID',
 					},
 					{
 						displayName: 'User ID',
-						name: 'userId',
+						name: 'resource_id',
 						type: 'string',
 						default: '',
 						description: 'Filter by user ID',
@@ -372,6 +386,169 @@ export class Teamdeck implements INodeType {
 				default: '',
 				description: 'ID of the time entry',
 			},
+			{
+				displayName: 'Update Fields',
+				name: 'updateFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: ['time-entries'],
+						operation: ['update'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Project ID',
+						name: 'project_id',
+						type: 'string',
+						default: '',
+						description: 'ID of the project',
+					},
+					{
+						displayName: 'User ID',
+						name: 'resource_id',
+						type: 'string',
+						default: '',
+						description: 'ID of the user',
+					},
+					{
+						displayName: 'minutes',
+						name: 'minutes',
+						type: 'number',
+						default: 0,
+						description: 'minutes',
+					},
+					{
+						displayName: 'end_date',
+						name: 'end_date',
+						type: 'dateTime',
+						default: '',
+						description: 'End date of the time entry (YYYY-MM-DD)',
+					},
+					{
+						displayName: 'start_date',
+						name: 'start_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Start date of the time entry (YYYY-MM-DD)',
+					},
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+						description: 'description',
+					},
+					// Aggiungi altri campi che possono essere aggiornati
+				],
+			},
+			{
+				displayName: 'Project ID',
+				name: 'projectId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['project'],
+						operation: ['delete', 'get', 'update'],
+					},
+				},
+				default: '',
+				description: 'ID of the project',
+			},
+			{
+				displayName: 'Update Fields',
+				name: 'updateFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: ['project'],
+						operation: ['update'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Name',
+						name: 'name',
+						type: 'string',
+						default: '',
+						description: 'New name of the project',
+					},
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+						description: 'New description of the project',
+					},
+					{
+						displayName: 'Color',
+						name: 'color',
+						type: 'color',
+						default: '#2196F3',
+						description: 'New project color (hex code)',
+					},
+				],
+			},
+			{
+				displayName: 'Additional Fields',
+				name: 'additionalFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: ['timeEntry'],
+						operation: ['create'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Minutes',
+						name: 'minutes',
+						type: 'number',
+						required: true,
+						default: 0,
+						description: 'Duration in minutes',
+					},
+					{
+						displayName: 'Resource ID',
+						name: 'resource_id',
+						type: 'string',
+						required: true,
+						default: '',
+						description: 'ID of the resource',
+					},
+					{
+						displayName: 'Start Date',
+						name: 'start_date',
+						type: 'dateTime',
+						required: true,
+						default: '',
+						description: 'Start date of the entry (format: YYYY-MM-DD)',
+					},
+					{
+						displayName: 'End Date',
+						name: 'end_date',
+						type: 'dateTime',
+						required: true,
+						default: '',
+						description: 'End date of the entry (format: YYYY-MM-DD)',
+					},
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						required: true,
+						default: '',
+						description: 'description',
+					},
+				],
+			},
 		],
 	};
 
@@ -383,8 +560,8 @@ export class Teamdeck implements INodeType {
 		// Funzione helper per gestire le chiamate paginate
 		async function getAllResults(
 			that: IExecuteFunctions,
-			endpoint: string,
-			qs: any = {},
+				endpoint: string,
+				qs: any = {},
 		): Promise<any[]> {
 			const credentials = await that.getCredentials('teamdeckApi');
 			const returnAll = that.getNodeParameter('returnAll', 0) as boolean;
@@ -523,10 +700,10 @@ export class Teamdeck implements INodeType {
 		else if (resource === 'time-entries') {
 			if (operation === 'getAll') {
 				const filters = this.getNodeParameter('filters', 0, {}) as {
-					startDate?: string;
-					endDate?: string;
-					projectId?: string;
-					userId?: string;
+					start_date?: string;
+					end_date?: string;
+					project_id?: string;
+					resource_id?: string;
 				};
 
 				const qs: any = { ...filters };
@@ -538,16 +715,18 @@ export class Teamdeck implements INodeType {
 			}
 			else if (operation === 'create') {
 				const credentials = await this.getCredentials('teamdeckApi');
-				const projectId = this.getNodeParameter('projectId', 0) as string;
-				const userId = this.getNodeParameter('userId', 0) as string;
-				const startDate = this.getNodeParameter('startDate', 0) as string;
-				const duration = this.getNodeParameter('duration', 0) as number;
-
+				
+				// Formattazione delle date nel formato YYYY-MM-DD
+				const startDate = (this.getNodeParameter('start_date', 0) as string).split('T')[0];
+				const endDate = (this.getNodeParameter('end_date', 0) as string).split('T')[0];
+				
 				const body = {
-					project_id: projectId,
-					user_id: userId,
+					project_id: this.getNodeParameter('project_id', 0) as string,
+					resource_id: this.getNodeParameter('resource_id', 0) as string,
 					start_date: startDate,
-					duration: duration,
+					end_date: endDate,
+					minutes: this.getNodeParameter('minutes', 0) as number,
+					description: this.getNodeParameter('description', 0, '') as string,
 				};
 
 				const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
@@ -563,6 +742,39 @@ export class Teamdeck implements INodeType {
 				returnData.push({
 					json: response.data || response,
 				});
+			}
+			else if (operation === 'update') {
+				const timeEntryId = this.getNodeParameter('timeEntryId', 0) as string;
+				const updateFields = this.getNodeParameter('updateFields', 0) as IDataObject;
+				
+				const credentials = await this.getCredentials('teamdeckApi');
+				const endpoint = `/time-entries/${timeEntryId}`;
+				const responseData = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'PUT',
+					url: endpoint,
+					body: updateFields,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+					json: true,
+				});
+
+				returnData.push({ json: responseData.data || responseData });
+			}
+			else if (operation === 'delete') {
+				const timeEntryId = this.getNodeParameter('timeEntryId', 0) as string;
+				
+				const credentials = await this.getCredentials('teamdeckApi');
+				const endpoint = `/time-entries/${timeEntryId}`;
+				const responseData = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+					method: 'DELETE',
+					url: endpoint,
+					headers: {
+						'X-Api-Key': credentials.apiKey,
+					},
+				});
+
+				returnData.push({ json: responseData.data || responseData });
 			}
 		}
 
