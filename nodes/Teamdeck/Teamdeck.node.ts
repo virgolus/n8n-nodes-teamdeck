@@ -45,6 +45,24 @@ export class Teamdeck implements INodeType {
 				],
 				default: 'project',
 			},
+			{
+				displayName: 'Additional JSON',
+				name: 'additionalJson',
+				type: 'json',
+				default: {},
+				typeOptions: {
+					alwaysOpenEditWindow: true,
+				},
+				displayOptions: {
+					show: {
+						resource: [
+							'project',
+							'time-entries'
+						],
+					},
+				},
+				description: 'JSON data to pass through from input to output',
+			},
 			// Project Operations
 			{
 				displayName: 'Operation',
@@ -570,6 +588,13 @@ export class Teamdeck implements INodeType {
 		for (let i = 0; i < items.length; i++) {
 			const resource = this.getNodeParameter('resource', i) as string;
 			const operation = this.getNodeParameter('operation', i) as string;
+			let additionalJson: IDataObject = {};
+			
+			try {
+				additionalJson = this.getNodeParameter('additionalJson', i) as IDataObject;
+			} catch (e) {
+				// If additionalJson is not provided, continue with empty object
+			}
 
 			if (resource === 'project') {
 				if (operation === 'getAll') {
@@ -583,7 +608,10 @@ export class Teamdeck implements INodeType {
 					
 					const results = await getAllResults(this, 'projects', qs, i);
 					returnData.push.apply(returnData, results.map(item => ({
-						json: item,
+						json: {
+							...item,
+							additionalJson: additionalJson
+						},
 					})));
 				}
 				else if (operation === 'create') {
@@ -610,7 +638,10 @@ export class Teamdeck implements INodeType {
 					});
 
 					returnData.push({
-						json: response.data || response,
+						json: {
+							...response.data || response,
+							additionalJson: additionalJson
+						},
 					});
 				}
 				else if (operation === 'delete') {
@@ -625,7 +656,12 @@ export class Teamdeck implements INodeType {
 						},
 					});
 
-					returnData.push({ json: { success: true } });
+					returnData.push({ 
+						json: { 
+							success: true,
+							additionalJson: additionalJson
+						},
+					});
 				}
 				else if (operation === 'get') {
 					const credentials = await this.getCredentials('teamdeckApi');
@@ -640,7 +676,12 @@ export class Teamdeck implements INodeType {
 						json: true,
 					});
 
-					returnData.push({ json: response.data || response });
+					returnData.push({ 
+						json: {
+							...response.data || response,
+							additionalJson: additionalJson
+						},
+					});
 				}
 				else if (operation === 'update') {
 					const credentials = await this.getCredentials('teamdeckApi');
@@ -707,7 +748,10 @@ export class Teamdeck implements INodeType {
 						});
 
 						returnData.push({
-							json: response.data || response,
+							json: {
+								...response.data || response,
+								additionalJson: additionalJson
+							},
 						});
 					} catch (error) {
 						throw error;
@@ -728,7 +772,12 @@ export class Teamdeck implements INodeType {
 						json: true,
 					});
 
-					returnData.push({ json: response.data || response });
+					returnData.push({ 
+						json: {
+							...response.data || response,
+							additionalJson: additionalJson						
+						},
+					});
 				}
 				else if (operation === 'delete') {
 					const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
