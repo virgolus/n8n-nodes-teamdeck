@@ -605,7 +605,7 @@ export class Teamdeck implements INodeType {
 					};
 
 					const qs: any = { ...additionalFields };
-					
+
 					const results = await getAllResults(this, 'projects', qs, i);
 					returnData.push.apply(returnData, results.map(item => ({
 						json: {
@@ -710,7 +710,21 @@ export class Teamdeck implements INodeType {
 						resource_id?: string;
 					};
 
-					const qs: any = { ...filters };
+					const qs: any = {};
+					
+					// Add only non-empty filters to query with correct parameter names
+					if (filters.start_date) {
+						qs.start_date_from = filters.start_date.split(' ')[0];
+					}
+					if (filters.end_date) {
+						qs.start_date_to = filters.end_date.split(' ')[0];
+					}
+					if (filters.project_id) {
+						qs.project_id = filters.project_id;
+					}
+					if (filters.resource_id) {
+						qs.resource_id = filters.resource_id;
+					}
 					
 					const results = await getAllResults(this, 'time-entries', qs, i);
 					returnData.push.apply(returnData, results.map(item => ({
