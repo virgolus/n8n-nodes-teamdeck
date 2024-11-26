@@ -3,9 +3,23 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	NodeApiError,
 	IDataObject,
+	NodeOperationError,
 } from 'n8n-workflow';
+
+function formatDate(dateString: string, self: IExecuteFunctions): string {
+	let formattedDate: string;
+	
+	if (dateString.includes('T')) {
+		// Format: YYYY-MM-ddTHH:mm:sssZ
+		formattedDate = dateString.split('T')[0];
+	} else {
+		// Format: YYYY-MM-dd HH:mm:ss
+		formattedDate = dateString.split(' ')[0];
+	}
+	
+	return formattedDate;
+}
 
 export class Teamdeck implements INodeType {
 	description: INodeTypeDescription = {
@@ -93,7 +107,7 @@ export class Teamdeck implements INodeType {
 						name: 'Get',
 						value: 'get',
 						description: 'Get a single project',
-						action: 'Get a project',
+						action: 'Get a single project',
 					},
 					{
 						name: 'Get Many',
@@ -157,8 +171,8 @@ export class Teamdeck implements INodeType {
 						displayName: 'Color',
 						name: 'color',
 						type: 'color',
-						default: '#2196F3',
-						description: 'Project color (hex code)',
+						default: '',
+						description: 'Color of the project (hex code)',
 					},
 				],
 			},
@@ -489,7 +503,7 @@ export class Teamdeck implements INodeType {
 					},
 				},
 				default: '',
-				description: 'ID of the project',
+				description: 'The ID of the project',
 			},
 			{
 				displayName: 'Update Fields',
@@ -509,21 +523,21 @@ export class Teamdeck implements INodeType {
 						name: 'name',
 						type: 'string',
 						default: '',
-						description: 'New name of the project',
+						description: 'Name of the project',
 					},
 					{
 						displayName: 'Description',
 						name: 'description',
 						type: 'string',
 						default: '',
-						description: 'New description of the project',
+						description: 'Description of the project',
 					},
 					{
 						displayName: 'Color',
 						name: 'color',
 						type: 'color',
-						default: '#2196F3',
-						description: 'New project color (hex code)',
+						default: '',
+						description: 'Color of the project (hex code)',
 					},
 				],
 			},
@@ -533,283 +547,439 @@ export class Teamdeck implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
+		const errorData: INodeExecutionData[] = [];
 
 		// Helper function for paginated calls
 		async function getAllResults(
-			that: IExecuteFunctions,
+			self: IExecuteFunctions,
 			endpoint: string,
-			qs: any = {},
+			qs: IDataObject,
 			itemIndex: number,
-		): Promise<any[]> {
-			const credentials = await that.getCredentials('teamdeckApi');
-			const returnAll = that.getNodeParameter('returnAll', itemIndex) as boolean;
-			const limit = returnAll ? -1 : (that.getNodeParameter('limit', itemIndex) as number);
-			let results: any[] = [];
+		) {
+			const returnData: IDataObject[] = [];
+			let responseData;
 			
 			qs.per_page = 100;
 			qs.page = 1;
-
-			try {
-				do {
-					const response = await that.helpers.requestWithAuthentication.call(that, 'teamdeckApi', {
-						method: 'GET',
-						url: `https://api.teamdeck.io/v1/${endpoint}`,
-						qs,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
-						json: true,
-						resolveWithFullResponse: true,
-					});
-
-					const items = response.body.data || response.body;
-					results.push.apply(results, items);
-
-					const totalPages = parseInt(response.headers['x-pagination-page-count'] || '1');
-					const hasMore = qs.page < totalPages;
-
-					if (!returnAll && results.length >= limit) {
-						results = results.slice(0, limit);
-						break;
-					}
-
-					if (!hasMore) break;
-					qs.page++;
-
-				} while (true);
-
-				return results;
-			} catch (error) {
-				throw new NodeApiError(that.getNode(), error);
-			}
-		}
-
-		// Process each input item
-		for (let i = 0; i < items.length; i++) {
-			const resource = this.getNodeParameter('resource', i) as string;
-			const operation = this.getNodeParameter('operation', i) as string;
-			let additionalJson: IDataObject = {};
 			
 			try {
-				additionalJson = this.getNodeParameter('additionalJson', i) as IDataObject;
-			} catch (e) {
-				// If additionalJson is not provided, continue with empty object
-			}
-
-			if (resource === 'project') {
-				if (operation === 'getAll') {
-					const additionalFields = this.getNodeParameter('additionalFields', i, {}) as {
-						archived?: boolean;
-						sort?: string;
-						order?: string;
-					};
-
-					const qs: any = { ...additionalFields };
-
-					const results = await getAllResults(this, 'projects', qs, i);
-					returnData.push.apply(returnData, results.map(item => ({
-						json: {
-							...item,
-							additionalJson: additionalJson
-						},
-					})));
-				}
-				else if (operation === 'create') {
-					const credentials = await this.getCredentials('teamdeckApi');
-					const name = this.getNodeParameter('name', i) as string;
-					const additionalFields = this.getNodeParameter('additionalFields', i, {}) as {
-						description?: string;
-						color?: string;
-					};
-
-					const body = {
-						name,
-						...additionalFields,
-					};
-
-					const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-						method: 'POST',
-						url: 'https://api.teamdeck.io/v1/projects',
-						body,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
-						json: true,
-					});
-
-					returnData.push({
-						json: {
-							...response.data || response,
-							additionalJson: additionalJson
-						},
-					});
-				}
-				else if (operation === 'delete') {
-					const credentials = await this.getCredentials('teamdeckApi');
-					const project_id = this.getNodeParameter('project_id', i) as string;
-					
-					await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-						method: 'DELETE',
-						url: `https://api.teamdeck.io/v1/projects/${project_id}`,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
-					});
-
-					returnData.push({ 
-						json: { 
-							success: true,
-							additionalJson: additionalJson
-						},
-					});
-				}
-				else if (operation === 'get') {
-					const credentials = await this.getCredentials('teamdeckApi');
-					const project_id = this.getNodeParameter('project_id', i) as string;
-					
-					const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+				do {
+					responseData = await self.helpers.requestWithAuthentication.call(self, 'teamdeckApi', {
 						method: 'GET',
-						url: `https://api.teamdeck.io/v1/projects/${project_id}`,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
+						uri: `/api/v1/${endpoint}`,
+						qs,
 						json: true,
 					});
-
-					returnData.push({ 
-						json: {
-							...response.data || response,
-							additionalJson: additionalJson
-						},
-					});
-				}
-				else if (operation === 'update') {
-					const credentials = await this.getCredentials('teamdeckApi');
-					const project_id = this.getNodeParameter('project_id', i) as string;
-					const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
 					
-					const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-						method: 'PUT',
-						url: `https://api.teamdeck.io/v1/projects/${project_id}`,
-						body: updateFields,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
-						json: true,
-					});
-
-					returnData.push({ json: response.data || response });
-				}
-			}
-			else if (resource === 'time-entries') {
-				if (operation === 'getAll') {
-					const filters = this.getNodeParameter('filters', i, {}) as {
-						start_date?: string;
-						end_date?: string;
-						project_id?: string;
-						resource_id?: string;
-					};
-
-					const qs: any = {};
+					returnData.push.apply(returnData, responseData.data);
 					
-					// Add only non-empty filters to query with correct parameter names
-					if (filters.start_date) {
-						qs.start_date_from = filters.start_date.split(' ')[0];
-					}
-					if (filters.end_date) {
-						qs.start_date_to = filters.end_date.split(' ')[0];
-					}
-					if (filters.project_id) {
-						qs.project_id = filters.project_id;
-					}
-					if (filters.resource_id) {
-						qs.resource_id = filters.resource_id;
-					}
-					
-					const results = await getAllResults(this, 'time-entries', qs, i);
-					returnData.push.apply(returnData, results.map(item => ({
-						json: item,
-					})));
-				}
-				else if (operation === 'create') {
-					const credentials = await this.getCredentials('teamdeckApi');
-					
-					const formatDate = (dateString: string): string => {
-						return dateString.split(' ')[0];
-					};
-					
-					const startDate = formatDate(this.getNodeParameter('start_date', i) as string);
-					const endDate = formatDate(this.getNodeParameter('end_date', i) as string);
-					
-					const body = {
-						project_id: this.getNodeParameter('project_id', i) as string,
-						resource_id: this.getNodeParameter('resource_id', i) as string,
-						start_date: startDate,
-						end_date: endDate,
-						minutes: this.getNodeParameter('minutes', i) as number,
-						description: this.getNodeParameter('description', i, '') as string,
-					};
-
-					try {
-						const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-							method: 'POST',
-							url: 'https://api.teamdeck.io/v1/time-entries',
-							body,
-							headers: {
-								'X-Api-Key': credentials.apiKey,
-							},
-							json: true,
-						});
-
-						returnData.push({
-							json: {
-								...response.data || response,
-								additionalJson: additionalJson
-							},
-						});
-					} catch (error) {
-						throw error;
-					}
-				}
-				else if (operation === 'update') {
-					const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
-					const updateFields = this.getNodeParameter('updateFields', i) as IDataObject;
-					
-					const credentials = await this.getCredentials('teamdeckApi');
-					const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-						method: 'PUT',
-						url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
-						body: updateFields,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
-						json: true,
-					});
-
-					returnData.push({ 
-						json: {
-							...response.data || response,
-							additionalJson: additionalJson						
-						},
-					});
-				}
-				else if (operation === 'delete') {
-					const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
-					
-					const credentials = await this.getCredentials('teamdeckApi');
-					await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-						method: 'DELETE',
-						url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
-						headers: {
-							'X-Api-Key': credentials.apiKey,
-						},
-					});
-
-					returnData.push({ json: { success: true } });
-				}
+					qs.page++;
+				} while (responseData.data.length === qs.per_page);
+				
+				return returnData;
+			} catch (error) {
+				throw error; // Propagate error to be handled by the main try-catch
 			}
 		}
 
-		return [returnData];
+		for (let i = 0; i < items.length; i++) {
+			try {
+				const resource = this.getNodeParameter('resource', i) as string;
+				const operation = this.getNodeParameter('operation', i) as string;
+				let additionalJson: IDataObject = {};
+				
+				try {
+					additionalJson = this.getNodeParameter('additionalJson', i) as IDataObject;
+				} catch (e) {
+					// If additionalJson is not provided, continue with empty object
+				}
+
+				if (resource === 'project') {
+					if (operation === 'getAll') {
+						try {
+							const additionalFields = this.getNodeParameter('additionalFields', i, {});
+							const qs: any = { ...additionalFields };
+							const results = await getAllResults(this, 'projects', qs, i);
+							returnData.push.apply(returnData, results.map(item => ({
+								json: {
+									...item,
+									additionalJson: additionalJson
+								},
+							})));
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'create') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const name = this.getNodeParameter('name', i) as string;
+							const additionalFields = this.getNodeParameter('additionalFields', i, {});
+
+							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'POST',
+								url: 'https://api.teamdeck.io/v1/projects',
+								body: {
+									name,
+									...additionalFields,
+								},
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+								json: true,
+							});
+
+							returnData.push({
+								json: {
+									...response.data || response,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'delete') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const project_id = this.getNodeParameter('project_id', i) as string;
+							
+							await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'DELETE',
+								url: `https://api.teamdeck.io/v1/projects/${project_id}`,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+							});
+
+							returnData.push({ 
+								json: { 
+									success: true,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'get') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const projectId = this.getNodeParameter('project_id', i) as string;
+
+							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'GET',
+								url: `https://api.teamdeck.io/v1/projects/${projectId}`,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+								json: true,
+							});
+
+							returnData.push({
+								json: {
+									...response.data || response,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'update') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const projectId = this.getNodeParameter('project_id', i) as string;
+							const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
+
+							if (Object.keys(updateFields).length === 0) {
+								throw new NodeOperationError(this.getNode(), 'Please specify at least one field to update', { itemIndex: i });
+							}
+
+							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'PUT',
+								url: `https://api.teamdeck.io/v1/projects/${projectId}`,
+								body: updateFields,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+								json: true,
+							});
+
+							returnData.push({
+								json: {
+									...response.data || response,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+				}
+				else if (resource === 'time-entries') {
+					if (operation === 'getAll') {
+						try {
+							const filters = this.getNodeParameter('filters', i, {});
+							const qs: any = {};
+							
+							if (filters.start_date) {
+								qs.start_date_from = formatDate(filters.start_date.toString(), this);
+							}
+							if (filters.end_date) {
+								qs.start_date_to = formatDate(filters.end_date.toString(), this);
+							}
+							if (filters.project_id) {
+								qs.project_id = filters.project_id;
+							}
+							if (filters.resource_id) {
+								qs.resource_id = filters.resource_id;
+							}
+							
+							const results = await getAllResults(this, 'time-entries', qs, i);
+							returnData.push.apply(returnData, results.map(item => ({
+								json: {
+									...item,
+									additionalJson: additionalJson
+								},
+							})));
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'create') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							
+							const body: IDataObject = {
+								project_id: this.getNodeParameter('project_id', i) as string,
+								resource_id: this.getNodeParameter('resource_id', i) as string,
+							};
+							
+							const startDate = this.getNodeParameter('start_date', i) as string;
+							if (!startDate) {
+								throw new NodeOperationError(this.getNode(), 'Start date is required', { itemIndex: i });
+							}
+							body.start_date = formatDate(startDate, this);
+							
+							const endDate = this.getNodeParameter('end_date', i) as string;
+							if (!endDate) {
+								throw new NodeOperationError(this.getNode(), 'End date is required', { itemIndex: i });
+							}
+							body.end_date = formatDate(endDate, this);
+							
+							body.minutes = this.getNodeParameter('minutes', i) as number;
+							body.description = this.getNodeParameter('description', i, '') as string;
+
+							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'POST',
+								url: 'https://api.teamdeck.io/v1/time-entries',
+								body,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+								json: true,
+							});
+
+							returnData.push({
+								json: {
+									...response.data || response,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'get') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
+
+							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'GET',
+								url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+								json: true,
+							});
+
+							returnData.push({
+								json: {
+									...response.data || response,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'update') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
+							const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
+
+							if (Object.keys(updateFields).length === 0) {
+								throw new NodeOperationError(this.getNode(), 'Please specify at least one field to update', { itemIndex: i });
+							}
+
+							// Format dates if they exist in updateFields
+							if (updateFields.start_date) {
+								updateFields.start_date = formatDate(updateFields.start_date as string, this);
+							}
+							if (updateFields.end_date) {
+								updateFields.end_date = formatDate(updateFields.end_date as string, this);
+							}
+
+							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'PUT',
+								url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
+								body: updateFields,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+								json: true,
+							});
+
+							returnData.push({
+								json: {
+									...response.data || response,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+					else if (operation === 'delete') {
+						try {
+							const credentials = await this.getCredentials('teamdeckApi');
+							const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
+							
+							await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
+								method: 'DELETE',
+								url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
+								headers: {
+									'X-Api-Key': credentials.apiKey,
+								},
+							});
+
+							returnData.push({ 
+								json: { 
+									success: true,
+									additionalJson: additionalJson
+								},
+							});
+						} catch (error) {
+							errorData.push({
+								json: {
+									error: error.message,
+									statusCode: error.statusCode || 500,
+									body: error.response?.body,
+									additionalJson: additionalJson
+								},
+								pairedItem: { item: i },
+							});
+							continue;
+						}
+					}
+				}
+			} catch (error) {
+				errorData.push({
+					json: {
+						error: error.message,
+						statusCode: error.statusCode || 500,
+						body: error.response?.body
+					},
+					pairedItem: { item: i },
+				});
+				continue;
+			}
+		}
+
+		return [returnData, errorData];
 	}
 }
