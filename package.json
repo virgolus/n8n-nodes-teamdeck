@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-teamdeck",
-  "version": "1.2.12",
+  "version": "1.2.29",
   "description": "n8n Teamdeck plugin",
   "keywords": [
     "n8n-community-node-package"
@@ -16,8 +16,8 @@
     "url": "https://github.com/virgolus/n8n-nodes-teamdeck.git"
   },
   "engines": {
-    "node": ">=18.10",
-    "pnpm": ">=9.1"
+    "node": ">=18.10.0",
+    "n8n": ">=1.0.0"
   },
   "packageManager": "pnpm@9.1.4",
   "main": "index.js",
@@ -52,6 +52,10 @@
     "typescript": "^5.5.3"
   },
   "peerDependencies": {
-    "n8n-workflow": "*"
+    "n8n-workflow": ">=1.0.0",
+    "n8n-core": ">=1.0.0"
+  },
+  "dependencies": {
+    "n8n-core": ">=1.0.0"
   }
 }

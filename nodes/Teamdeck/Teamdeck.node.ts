@@ -5,7 +5,6 @@ import {
 	INodeTypeDescription,
 	IDataObject,
 	NodeApiError,
-	ConnectionTypes,
 } from 'n8n-workflow';
 
 function formatDate(dateString: string, self: IExecuteFunctions): string {
@@ -22,90 +21,6 @@ function formatDate(dateString: string, self: IExecuteFunctions): string {
 	return formattedDate;
 }
 
-// Funzione helper per gestire gli errori
-function handleTeamdeckError(error: any, itemIndex: number, context: any, logger: any): IDataObject {
-    let errorDetails: IDataObject;
-
-    if (error.response) {
-        // Errori API
-        const statusCode = error.response.statusCode;
-        const body = error.response.body;
-
-        switch (statusCode) {
-            case 401:
-                errorDetails = {
-                    message: 'Authentication failed. Please check your API credentials.',
-                    statusCode,
-                    body,
-                };
-                logger.error('Authentication error:', { statusCode, body, itemIndex });
-                break;
-            case 403:
-                errorDetails = {
-                    message: 'Access forbidden. Please check your API permissions.',
-                    statusCode,
-                    body,
-                };
-                logger.error('Authorization error:', { statusCode, body, itemIndex });
-                break;
-            case 404:
-                errorDetails = {
-                    message: 'Resource not found.',
-                    statusCode,
-                    body,
-                };
-                logger.error('Not found error:', { statusCode, body, itemIndex, context });
-                break;
-            case 429:
-                errorDetails = {
-                    message: 'Rate limit exceeded. Please try again later.',
-                    statusCode,
-                    body,
-                };
-                logger.error('Rate limit error:', { statusCode, body, itemIndex });
-                break;
-            default:
-                if (statusCode >= 500) {
-                    errorDetails = {
-                        message: 'Teamdeck API server error.',
-                        statusCode,
-                        body,
-                    };
-                    logger.error('Server error:', { statusCode, body, itemIndex });
-                } else {
-                    errorDetails = {
-                        message: 'Unknown API error occurred.',
-                        statusCode,
-                        body,
-                    };
-                    logger.error('Unknown API error:', { statusCode, body, itemIndex });
-                }
-        }
-    } else if (error instanceof NodeApiError) {
-        // Errori custom
-        errorDetails = {
-            message: error.message,
-            description: error.description,
-            cause: error.cause,
-        };
-        logger.error('Custom Teamdeck error:', { error, itemIndex, context });
-    } else {
-        // Altri errori
-        errorDetails = {
-            message: error.message || 'An unknown error occurred',
-            stack: error.stack,
-        };
-        logger.error('Unexpected error:', { error, itemIndex, context });
-    }
-
-    return {
-        ...errorDetails,
-        timestamp: new Date().toISOString(),
-        itemIndex,
-        context,
-    };
-}
-
 export class Teamdeck implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Teamdeck',
@@ -115,19 +30,19 @@ export class Teamdeck implements INodeType {
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Interact with Teamdeck API',
-		defaults: {
-			name: 'Teamdeck',
-		},
-		inputs: ['main'] as ConnectionTypes[],
-		outputs: ['main', 'error'] as ConnectionTypes[],
-		credentials: [
-			{
-				name: 'teamdeckApi',
-				required: true,
+			defaults: {
+				name: 'Teamdeck',
 			},
-		],
-		properties: [
-			{
+			inputs: ['main'],
+			outputs: ['main'],
+			credentials: [
+				{
+					name: 'teamdeckApi',
+					required: true,
+				},
+			],
+			properties: [
+				{
 					displayName: 'Resource',
 					name: 'resource',
 					type: 'options',
@@ -627,13 +542,12 @@ export class Teamdeck implements INodeType {
 					],
 				},
 			],
-		};
+	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 		const errorData: INodeExecutionData[] = [];
-		const logger = this.logger;
 
 		// Initialize item with a default value
 		let item: INodeExecutionData = {
@@ -966,42 +880,48 @@ export class Teamdeck implements INodeType {
 					}
 
 				} catch (error) {
-					logger.error(`Error processing item ${i}:`, error);
-					
-					const errorDetails = handleTeamdeckError(error, i, {
-						resource: this.getNodeParameter('resource', i, ''),
-						operation: this.getNodeParameter('operation', i, ''),
-						originalItem: items[i].json,
-					}, logger);
-
-					// Modified error handling
-					errorData.push({
-						json: {
-							error: errorDetails,
-							itemIndex: i,
-							originalItem: items[i].json,
-						},
-						pairedItem: { item: i },
-					});
-					
-					if (!this.continueOnFail()) {
-						// Se continueOnFail è false, termina l'esecuzione
-						throw error;
+					if (this.continueOnFail()) {
+						const errorItem = {
+							json: {
+								error: error.message,
+								details: error.description || error.response?.body?.message || 
+										'The resource you are requesting could not be found',
+								statusCode: error.response?.statusCode,
+								itemIndex: i,
+								timestamp: new Date().toISOString(),
+								// Includi anche i dati originali dell'item che ha causato l'errore
+								originalItem: items[i].json,
+							},
+						};
+						errorData.push(errorItem);
+						continue;
 					}
+					throw error;
 				}
 			}
-
-			logger.info(`Execution completed:
-				- Total items: ${items.length}
-				- Successful: ${returnData.length}
-				- Errors: ${errorData.length}`);
-
-			// Return both success and error data
-			return [returnData, errorData];
+			
+			// Se ci sono errori e continueOnFail è attivo, restituisci entrambi i branch
+			if (errorData.length > 0) {
+				return [returnData, errorData];
+			}
+			
+			// Altrimenti restituisci solo il branch di successo
+			return [returnData];
 
 		} catch (error) {
-			// Handle any global errors
-			logger.error('Global execution error:', error);
+			if (this.continueOnFail()) {
+				// In caso di errore globale, includi informazioni dettagliate
+				const errorItem = {
+					json: {
+						error: error.message,
+						details: error.description || error.response?.body?.message || 
+								'The resource you are requesting could not be found',
+						statusCode: error.response?.statusCode,
+						timestamp: new Date().toISOString(),
+					},
+				};
+				return [[], [errorItem]];
+			}
 			throw error;
 		}
 	}
