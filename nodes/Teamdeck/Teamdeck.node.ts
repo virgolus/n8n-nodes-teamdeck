@@ -5,6 +5,7 @@ import {
 	INodeTypeDescription,
 	IDataObject,
 	NodeApiError,
+	NodeConnectionType,
 } from 'n8n-workflow';
 
 function formatDate(dateString: string, self: IExecuteFunctions): string {
@@ -29,519 +30,836 @@ export class Teamdeck implements INodeType {
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-		description: 'Interact with Teamdeck API',
-			defaults: {
-				name: 'Teamdeck',
+		description: 'Interact with Teamdeck API for project management and time tracking',
+		defaults: {
+			name: 'Teamdeck',
+		},
+		inputs: [NodeConnectionType.Main],
+		outputs: [NodeConnectionType.Main],
+		usableAsTool: true,
+		codex: {
+			categories: ['Productivity', 'Project Management'],
+			alias: ['teamdeck', 'time-tracking', 'project-management', 'time-entries', 'bookings', 'resource-scheduling'],
+			subcategories: {
+				'Project Management': ['Time Tracking', 'Project Operations', 'Bookings', 'Resource Scheduling'],
 			},
-			inputs: ['main'],
-			outputs: ['main'],
-			credentials: [
-				{
-					name: 'teamdeckApi',
-					required: true,
-				},
-			],
-			properties: [
-				{
-					displayName: 'Resource',
-					name: 'resource',
-					type: 'options',
-					noDataExpression: true,
-					options: [
-						{
-							name: 'Project',
-							value: 'project',
-						},
-						{
-							name: 'Time-Entry',
-							value: 'time-entries',
-						},
-					],
-					default: 'project',
-				},
-				{
-					displayName: 'Additional JSON',
-					name: 'additionalJson',
-					type: 'json',
-					default: {},
-					typeOptions: {
-						alwaysOpenEditWindow: true,
+		},
+		credentials: [
+			{
+				name: 'teamdeckApi',
+				required: true,
+			},
+		],
+		requestDefaults: {
+			baseURL: 'https://api.teamdeck.io/v1',
+			headers: {
+				'Accept': 'application/json',
+				'Content-Type': 'application/json',
+			},
+		},
+		properties: [
+			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Booking',
+						value: 'bookings',
 					},
-					displayOptions: {
-						show: {
-							resource: [
-								'project',
-								'time-entries'
-							],
-						},
+					{
+						name: 'Project',
+						value: 'project',
 					},
-					description: 'JSON data to pass through from input to output',
+					{
+						name: 'Time-Entry',
+						value: 'time-entries',
+					},
+				],
+				default: 'project',
+			},
+			{
+				displayName: 'Add Additional JSON',
+				name: 'useAdditionalJson',
+				type: 'boolean',
+				default: false,
+				displayOptions: {
+					show: {
+						resource: [
+							'project',
+							'time-entries',
+							'bookings'
+						],
+					},
 				},
-				// Project Operations
-				{
-					displayName: 'Operation',
-					name: 'operation',
-					type: 'options',
-					noDataExpression: true,
-					displayOptions: {
-						show: {
-							resource: [
-								'project',
-							],
-						},
-					},
-					options: [
-						{
-							name: 'Create',
-							value: 'create',
-							description: 'Create a new project',
-							action: 'Create a project',
-						},
-						{
-							name: 'Delete',
-							value: 'delete',
-							description: 'Delete a project',
-							action: 'Delete a project',
-						},
-						{
-							name: 'Get',
-							value: 'get',
-							description: 'Get a single project',
-							action: 'Get a single project',
-						},
-						{
-							name: 'Get Many',
-							value: 'getAll',
-							description: 'Get many projects',
-							action: 'Get many projects',
-						},
-						{
-							name: 'Update',
-							value: 'update',
-							description: 'Update a project',
-							action: 'Update a project',
-						},
-					],
-					default: 'getAll',
+				description: 'Whether to add additional JSON data to pass through from input to output',
+			},
+			{
+				displayName: 'Additional JSON',
+				name: 'additionalJson',
+				type: 'json',
+				default: {},
+				typeOptions: {
+					alwaysOpenEditWindow: true,
 				},
-				// Project Fields
-				{
-					displayName: 'Project Name',
-					name: 'name',
-					type: 'string',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'project',
-							],
-						},
+				displayOptions: {
+					show: {
+						resource: [
+							'project',
+							'time-entries',
+							'bookings'
+						],
+						useAdditionalJson: [true],
 					},
-					default: '',
-					description: 'Name of the project to create',
 				},
-				{
-					displayName: 'Additional Fields',
-					name: 'additionalFields',
-					type: 'collection',
-					placeholder: 'Add Field',
-					default: {},
-					displayOptions: {
-						show: {
-							resource: [
-								'project',
-							],
-							operation: [
-								'create',
-							],
-						},
+				description: 'JSON data to pass through from input to output',
+			},
+			// Project Operations
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: [
+							'project',
+						],
 					},
-					options: [
-						{
-							displayName: 'Description',
-							name: 'description',
-							type: 'string',
-							default: '',
-							description: 'Project description',
-						},
-						{
-							displayName: 'Color',
-							name: 'color',
-							type: 'color',
-							default: '',
-							description: 'Color of the project (hex code)',
-						},
-					],
 				},
-				// time-entries Operations
-				{
-					displayName: 'Operation',
-					name: 'operation',
-					type: 'options',
-					noDataExpression: true,
-					displayOptions: {
-						show: {
-							resource: [
-								'time-entries',
-							],
-						},
+				options: [
+					{
+						name: 'Create',
+						value: 'create',
+						description: 'Create a new project',
+						action: 'Create a project',
 					},
-					options: [
-						{
-							name: 'Create',
-							value: 'create',
-							description: 'Create a time-entry',
-							action: 'Create a time entry',
-						},
-						{
-							name: 'Delete',
-							value: 'delete',
-							description: 'Delete a time-entry',
-							action: 'Delete a time entry',
-						},
-						{
-							name: 'Get',
-							value: 'get',
-							description: 'Get a single time-entry',
-							action: 'Get a time entry',
-						},
-						{
-							name: 'Get Many',
-							value: 'getAll',
-							description: 'Get many time-entries',
-							action: 'Get many time entries',
-						},
-						{
-							name: 'Update',
-							value: 'update',
-							description: 'Update a time-entry',
-							action: 'Update a time entry',
-						},
-					],
-					default: 'getAll',
+					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete a project',
+						action: 'Delete a project',
+					},
+					{
+						name: 'Get',
+						value: 'get',
+						description: 'Get a single project',
+						action: 'Get a single project',
+					},
+					{
+						name: 'Get Many',
+						value: 'getAll',
+						description: 'Get many projects',
+						action: 'Get many projects',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						description: 'Update a project',
+						action: 'Update a project',
+					},
+				],
+				default: 'getAll',
+			},
+			// Project Fields
+			{
+				displayName: 'Project Name',
+				name: 'name',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'project',
+						],
+					},
 				},
-				// time-entries Fields
-				{
-					displayName: 'Project ID',
-					name: 'project_id',
-					type: 'string',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				default: '',
+				description: 'Name of the project to create',
+			},
+			{
+				displayName: 'Additional Fields',
+				name: 'additionalFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: [
+							'project',
+						],
+						operation: [
+							'create',
+						],
 					},
-					default: '',
-					description: 'ID of the project',
 				},
-				{
-					displayName: 'Resource ID',
-					name: 'resource_id',
-					type: 'string',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				options: [
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+						description: 'Project description',
 					},
-					default: '',
-					description: 'ID of the resource',
+					{
+						displayName: 'Color',
+						name: 'color',
+						type: 'color',
+						default: '',
+						description: 'Color of the project (hex code)',
+					},
+				],
+			},
+			// time-entries Operations
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: [
+							'time-entries',
+						],
+					},
 				},
-				{
-					displayName: 'Start Date',
-					name: 'start_date',
-					type: 'dateTime',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				options: [
+					{
+						name: 'Create',
+						value: 'create',
+						description: 'Create a time-entry',
+						action: 'Create a time entry',
 					},
-					default: '',
-					description: 'Start date of the entry (format: YYYY-MM-DD)',
+					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete a time-entry',
+						action: 'Delete a time entry',
+					},
+					{
+						name: 'Get',
+						value: 'get',
+						description: 'Get a single time-entry',
+						action: 'Get a time entry',
+					},
+					{
+						name: 'Get Many',
+						value: 'getAll',
+						description: 'Get many time-entries',
+						action: 'Get many time entries',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						description: 'Update a time-entry',
+						action: 'Update a time entry',
+					},
+				],
+				default: 'getAll',
+			},
+			// time-entries Fields
+			{
+				displayName: 'Project ID',
+				name: 'project_id',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
+					},
 				},
-				{
-					displayName: 'End Date',
-					name: 'end_date',
-					type: 'dateTime',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				default: '',
+				description: 'The unique identifier of the Teamdeck project (e.g., "12345")',
+			},
+			{
+				displayName: 'Resource ID',
+				name: 'resource_id',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
 					},
-					default: '',
-					description: 'End date of the entry (format: YYYY-MM-DD)',
 				},
-				{
-					displayName: 'Minutes',
-					name: 'minutes',
-					type: 'number',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				default: '',
+				description: 'ID of the resource',
+			},
+			{
+				displayName: 'Start Date',
+				name: 'start_date',
+				type: 'dateTime',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
 					},
-					default: 60,
-					description: 'Duration in minutes',
 				},
-				{
-					displayName: 'Description',
-					name: 'description',
-					type: 'string',
-					required: true,
-					displayOptions: {
-						show: {
-							operation: [
-								'create',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				default: '',
+				description: 'Start date of the entry (format: YYYY-MM-DD)',
+			},
+			{
+				displayName: 'End Date',
+				name: 'end_date',
+				type: 'dateTime',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
 					},
-					default: '',
 				},
-				// Filter Fields for time-entries GetAll
-				{
-					displayName: 'Filters',
-					name: 'filters',
-					type: 'collection',
-					placeholder: 'Add Filter',
-					default: {},
-					displayOptions: {
-						show: {
-							operation: [
-								'getAll',
-							],
-							resource: [
-								'time-entries',
-							],
-						},
+				default: '',
+				description: 'End date of the entry (format: YYYY-MM-DD)',
+			},
+			{
+				displayName: 'Minutes',
+				name: 'minutes',
+				type: 'number',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
 					},
-					options: [
-						{
-							displayName: 'Start Date',
-							name: 'start_date',
-							type: 'dateTime',
-							default: '',
-							description: 'Filter by start date',
-						},
-						{
-							displayName: 'End Date',
-							name: 'end_date',
-							type: 'dateTime',
-							default: '',
-							description: 'Filter by end date',
-						},
-						{
-							displayName: 'Project ID',
-							name: 'project_id',
-							type: 'string',
-							default: '',
-							description: 'Filter by project ID',
-						},
-						{
-							displayName: 'Resource ID',
-							name: 'resource_id',
-							type: 'string',
-							default: '',
-							description: 'Filter by resource ID',
-						},
-					],
 				},
-				{
-					displayName: 'Return All',
-					name: 'returnAll',
-					type: 'boolean',
-					displayOptions: {
-						show: {
-							operation: [
-								'getAll',
-							],
-							resource: [
-								'project',
-								'time-entries',
-							],
-						},
+				default: 60,
+				description: 'Duration in minutes (e.g., 60 for 1 hour, 480 for 8 hours)',
+			},
+			{
+				displayName: 'Description',
+				name: 'description',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'time-entries',
+						],
 					},
-					default: false,
-					description: 'Whether to return all results or only up to a given limit',
 				},
-				{
-					displayName: 'Limit',
-					name: 'limit',
-					type: 'number',
-					displayOptions: {
-						show: {
-							operation: [
-								'getAll',
-							],
-							resource: [
-								'project',
-								'time-entries',
-							],
-							returnAll: [
-								false,
-							],
-						},
+				default: '',
+			},
+			// Filter Fields for time-entries GetAll
+			{
+				displayName: 'Filters',
+				name: 'filters',
+				type: 'collection',
+				placeholder: 'Add Filter',
+				default: {},
+				displayOptions: {
+					show: {
+						operation: [
+							'getAll',
+						],
+						resource: [
+							'time-entries',
+						],
 					},
-					typeOptions: {
-						minValue: 1,
-					},
-					default: 50,
-					description: 'Max number of results to return',
 				},
-				{
-					displayName: 'Time Entry ID',
-					name: 'timeEntryId',
-					type: 'string',
-					required: true,
-					displayOptions: {
-						show: {
-							resource: ['time-entries'],
-							operation: ['delete', 'get', 'update'],
+				options: [
+					{
+						displayName: 'Start Date',
+						name: 'start_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Filter by start date',
+					},
+					{
+						displayName: 'End Date',
+						name: 'end_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Filter by end date',
+					},
+					{
+						displayName: 'Project ID',
+						name: 'project_id',
+						type: 'string',
+						default: '',
+						description: 'Filter by project ID',
+					},
+					{
+						displayName: 'Resource ID',
+						name: 'resource_id',
+						type: 'string',
+						default: '',
+						description: 'Filter by resource ID',
+					},
+				],
+			},
+			{
+				displayName: 'Return All',
+				name: 'returnAll',
+				type: 'boolean',
+				displayOptions: {
+					show: {
+						operation: [
+							'getAll',
+						],
+						resource: [
+							'project',
+							'time-entries',
+						],
+					},
+				},
+				default: false,
+				description: 'Whether to return all results or only up to a given limit',
+			},
+			{
+				displayName: 'Limit',
+				name: 'limit',
+				type: 'number',
+				displayOptions: {
+					show: {
+						operation: [
+							'getAll',
+						],
+						resource: [
+							'project',
+							'time-entries',
+						],
+						returnAll: [
+							false,
+						],
+					},
+				},
+				typeOptions: {
+					minValue: 1,
+				},
+				default: 50,
+				description: 'Max number of results to return',
+			},
+			{
+				displayName: 'Time Entry ID',
+				name: 'timeEntryId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['time-entries'],
+						operation: ['delete', 'get', 'update'],
+					},
+				},
+				default: '',
+				description: 'ID of the time entry',
+			},
+			{
+				displayName: 'Update Fields',
+				name: 'updateFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: ['time-entries'],
+						operation: ['update'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Project ID',
+						name: 'project_id',
+						type: 'string',
+						default: '',
+						description: 'ID of the project',
+					},
+					{
+						displayName: 'Resource ID',
+						name: 'resource_id',
+						type: 'string',
+						default: '',
+						description: 'ID of the resource',
+					},
+					{
+						displayName: 'Minutes',
+						name: 'minutes',
+						type: 'number',
+						default: 0,
+					},
+					{
+						displayName: 'End_date',
+						name: 'end_date',
+						type: 'dateTime',
+						default: '',
+						description: 'End date of the time entry (YYYY-MM-DD)',
+					},
+					{
+						displayName: 'Start_date',
+						name: 'start_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Start date of the time entry (YYYY-MM-DD)',
+					},
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+					},
+					// Aggiungi altri campi che possono essere aggiornati
+				],
+			},
+			{
+				displayName: 'Project ID',
+				name: 'project_id',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['project'],
+						operation: ['delete', 'get', 'update'],
+					},
+				},
+				default: '',
+				description: 'The ID of the project',
+			},
+			{
+				displayName: 'Update Fields',
+				name: 'updateFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: ['project'],
+						operation: ['update'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Name',
+						name: 'name',
+						type: 'string',
+						default: '',
+						description: 'Name of the project',
+					},
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+						description: 'Description of the project',
+					},
+					{
+						displayName: 'Color',
+						name: 'color',
+						type: 'color',
+						default: '',
+						description: 'Color of the project (hex code)',
+					},
+				],
+			},
+			// Booking Operations
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: [
+							'bookings',
+						],
+					},
+				},
+				options: [
+					{
+						name: 'Create',
+						value: 'create',
+						description: 'Create a new booking',
+						action: 'Create a booking',
+					},
+					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete a booking',
+						action: 'Delete a booking',
+					},
+					{
+						name: 'Get',
+						value: 'get',
+						description: 'Get a single booking',
+						action: 'Get a booking',
+					},
+					{
+						name: 'Get Many',
+						value: 'getAll',
+						description: 'Get many bookings',
+						action: 'Get many bookings',
+					},
+					{
+						name: 'Update',
+						value: 'update',
+						description: 'Update a booking',
+						action: 'Update a booking',
+					},
+				],
+				default: 'getAll',
+			},
+			// Booking Fields
+			{
+				displayName: 'Project ID',
+				name: 'project_id',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'bookings',
+						],
+					},
+				},
+				default: '',
+				description: 'The unique identifier of the project for the booking',
+			},
+			{
+				displayName: 'Resource ID',
+				name: 'resource_id',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'bookings',
+						],
+					},
+				},
+				default: '',
+				description: 'The unique identifier of the person/resource to book',
+			},
+			{
+				displayName: 'Start Date',
+				name: 'start_date',
+				type: 'dateTime',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'bookings',
+						],
+					},
+				},
+				default: '',
+				description: 'Start date of the booking (format: YYYY-MM-DD)',
+			},
+			{
+				displayName: 'End Date',
+				name: 'end_date',
+				type: 'dateTime',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'create',
+						],
+						resource: [
+							'bookings',
+						],
+					},
+				},
+				default: '',
+				description: 'End date of the booking (format: YYYY-MM-DD)',
+			},
+			{
+				displayName: 'Additional Fields',
+				name: 'additionalFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: [
+							'bookings',
+						],
+						operation: [
+							'create',
+						],
+					},
+				},
+				options: [
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+						description: 'Optional description for the booking',
+					},
+					{
+						displayName: 'Time Fraction',
+						name: 'time_fraction',
+						type: 'number',
+						default: 1,
+						description: 'Time allocation as fraction (0.5 = 50%, 1 = 100%)',
+						typeOptions: {
+							minValue: 0,
+							maxValue: 1,
 						},
 					},
-					default: '',
-					description: 'ID of the time entry',
+				],
+			},
+			// Filter Fields for bookings GetAll
+			{
+				displayName: 'Filters',
+				name: 'filters',
+				type: 'collection',
+				placeholder: 'Add Filter',
+				default: {},
+				displayOptions: {
+					show: {
+						operation: [
+							'getAll',
+						],
+						resource: [
+							'bookings',
+						],
+					},
 				},
-				{
-					displayName: 'Update Fields',
-					name: 'updateFields',
-					type: 'collection',
-					placeholder: 'Add Field',
-					default: {},
-					displayOptions: {
-						show: {
-							resource: ['time-entries'],
-							operation: ['update'],
+				options: [
+					{
+						displayName: 'Start Date',
+						name: 'start_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Filter by start date',
+					},
+					{
+						displayName: 'End Date',
+						name: 'end_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Filter by end date',
+					},
+					{
+						displayName: 'Project ID',
+						name: 'project_id',
+						type: 'string',
+						default: '',
+						description: 'Filter by project ID',
+					},
+					{
+						displayName: 'Resource ID',
+						name: 'resource_id',
+						type: 'string',
+						default: '',
+						description: 'Filter by resource ID',
+					},
+				],
+			},
+			{
+				displayName: 'Booking ID',
+				name: 'bookingId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['bookings'],
+						operation: ['delete', 'get', 'update'],
+					},
+				},
+				default: '',
+				description: 'ID of the booking',
+			},
+			{
+				displayName: 'Update Fields',
+				name: 'updateFields',
+				type: 'collection',
+				placeholder: 'Add Field',
+				default: {},
+				displayOptions: {
+					show: {
+						resource: ['bookings'],
+						operation: ['update'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Project ID',
+						name: 'project_id',
+						type: 'string',
+						default: '',
+						description: 'ID of the project',
+					},
+					{
+						displayName: 'Resource ID',
+						name: 'resource_id',
+						type: 'string',
+						default: '',
+						description: 'ID of the resource',
+					},
+					{
+						displayName: 'Start Date',
+						name: 'start_date',
+						type: 'dateTime',
+						default: '',
+						description: 'Start date of the booking (YYYY-MM-DD)',
+					},
+					{
+						displayName: 'End Date',
+						name: 'end_date',
+						type: 'dateTime',
+						default: '',
+						description: 'End date of the booking (YYYY-MM-DD)',
+					},
+					{
+						displayName: 'Description',
+						name: 'description',
+						type: 'string',
+						default: '',
+						description: 'Description of the booking',
+					},
+					{
+						displayName: 'Time Fraction',
+						name: 'time_fraction',
+						type: 'number',
+						default: 1,
+						description: 'Time allocation as fraction (0.5 = 50%, 1 = 100%)',
+						typeOptions: {
+							minValue: 0,
+							maxValue: 1,
 						},
 					},
-					options: [
-						{
-							displayName: 'Project ID',
-							name: 'project_id',
-							type: 'string',
-							default: '',
-							description: 'ID of the project',
-						},
-						{
-							displayName: 'Resource ID',
-							name: 'resource_id',
-							type: 'string',
-							default: '',
-							description: 'ID of the resource',
-						},
-						{
-							displayName: 'Minutes',
-							name: 'minutes',
-							type: 'number',
-							default: 0,
-						},
-						{
-							displayName: 'End_date',
-							name: 'end_date',
-							type: 'dateTime',
-							default: '',
-							description: 'End date of the time entry (YYYY-MM-DD)',
-						},
-						{
-							displayName: 'Start_date',
-							name: 'start_date',
-							type: 'dateTime',
-							default: '',
-							description: 'Start date of the time entry (YYYY-MM-DD)',
-						},
-						{
-							displayName: 'Description',
-							name: 'description',
-							type: 'string',
-							default: '',
-						},
-						// Aggiungi altri campi che possono essere aggiornati
-					],
-				},
-				{
-					displayName: 'Project ID',
-					name: 'project_id',
-					type: 'string',
-					required: true,
-					displayOptions: {
-						show: {
-							resource: ['project'],
-							operation: ['delete', 'get', 'update'],
-						},
-					},
-					default: '',
-					description: 'The ID of the project',
-				},
-				{
-					displayName: 'Update Fields',
-					name: 'updateFields',
-					type: 'collection',
-					placeholder: 'Add Field',
-					default: {},
-					displayOptions: {
-						show: {
-							resource: ['project'],
-							operation: ['update'],
-						},
-					},
-					options: [
-						{
-							displayName: 'Name',
-							name: 'name',
-							type: 'string',
-							default: '',
-							description: 'Name of the project',
-						},
-						{
-							displayName: 'Description',
-							name: 'description',
-							type: 'string',
-							default: '',
-							description: 'Description of the project',
-						},
-						{
-							displayName: 'Color',
-							name: 'color',
-							type: 'color',
-							default: '',
-							description: 'Color of the project (hex code)',
-						},
-					],
-				},
-			],
+				],
+			},
+		],
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -549,62 +867,254 @@ export class Teamdeck implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 		const errorData: INodeExecutionData[] = [];
 
-		// Initialize item with a default value
-		let item: INodeExecutionData = {
-			json: {},
-		};
-
-		// Helper function for paginated calls
-		async function getAllResults(
-			self: IExecuteFunctions,
-				endpoint: string,
-				qs: IDataObject,
-		) {
-			const returnData: IDataObject[] = [];
-			let responseData: IDataObject[] = [];
+		// Helper function for paginated API calls
+		async function getAllResults(context: IExecuteFunctions, resource: string, qs: IDataObject = {}): Promise<IDataObject[]> {
+			const credentials = await context.getCredentials('teamdeckApi');
+			let results: IDataObject[] = [];
+			let url: string;
 			
-			const returnAll = self.getNodeParameter('returnAll', 0) as boolean;
-			const limit = returnAll ? 0 : self.getNodeParameter('limit', 0) as number;
+			// Determine the correct endpoint
+			if (resource === 'time-entries') {
+				url = 'https://api.teamdeck.io/v1/time-entries';
+			} else if (resource === 'bookings') {
+				url = 'https://api.teamdeck.io/v1/bookings';
+			} else if (resource === 'projects') {
+				url = 'https://api.teamdeck.io/v1/projects';
+			} else {
+				url = `https://api.teamdeck.io/v1/${resource}`;
+			}
 			
-			qs.per_page = 100;
-			qs.page = 1;
+			let hasMore = true;
+			let page = 1;
 			
-			try {
-				do {
-					const response = await self.helpers.requestWithAuthentication.call(self, 'teamdeckApi', {
-							method: 'GET',
-							url: `https://api.teamdeck.io/v1/${endpoint}`,
-							qs,
-							json: true,
-							resolveWithFullResponse: true,
-						});
-						
-						responseData = response.body;
-						const totalPages = parseInt(response.headers['x-pagination-page-count'] || '1');
-						
-						if (Array.isArray(responseData)) {
-							returnData.push(...responseData);
-						}
-						
-						if (!returnAll && returnData.length >= limit) {
-							returnData.length = limit;
-							break;
-						}
-						
-						if (qs.page >= totalPages) {
-							break;
-						}
-						
-						qs.page++;
-						
-					} while (true);
-					
-					return returnData;
-				} catch (error) {
-					throw error;
+			while (hasMore) {
+				const requestOptions = {
+					method: 'GET' as const,
+					url,
+					qs: { ...qs, page },
+					headers: { 'X-Api-Key': credentials.apiKey },
+					json: true,
+				};
+				
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', requestOptions);
+				const data = response.data || response;
+				
+				if (Array.isArray(data)) {
+					results = results.concat(data);
+					hasMore = data.length > 0;
+				} else {
+					results.push(data);
+					hasMore = false;
 				}
+				
+				page++;
+				if (page > 100) break; // Safety check
+			}
+			
+			return results;
+		}
+
+		// Process projects operations
+		async function handleProject(context: IExecuteFunctions, operation: string, itemIndex: number, additionalJson: IDataObject): Promise<INodeExecutionData | INodeExecutionData[]> {
+			const credentials = await context.getCredentials('teamdeckApi');
+			const baseUrl = 'https://api.teamdeck.io/v1/projects';
+			const headers = { 'X-Api-Key': credentials.apiKey };
+
+			if (operation === 'getAll') {
+				const additionalFields = context.getNodeParameter('additionalFields', itemIndex, {});
+				const results = await getAllResults(context, 'projects', additionalFields);
+				return results.map((result: any) => ({ json: { ...result, additionalJson } }));
 			}
 
+			if (operation === 'create') {
+				const name = context.getNodeParameter('name', itemIndex) as string;
+				const additionalFields = context.getNodeParameter('additionalFields', itemIndex, {});
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'POST', url: baseUrl, body: { name, ...additionalFields }, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'get') {
+				const projectId = context.getNodeParameter('project_id', itemIndex) as string;
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'GET', url: `${baseUrl}/${projectId}`, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'update') {
+				const projectId = context.getNodeParameter('project_id', itemIndex) as string;
+				const updateFields = context.getNodeParameter('updateFields', itemIndex, {}) as IDataObject;
+				if (Object.keys(updateFields).length === 0) {
+					throw new NodeApiError(context.getNode(), { message: 'Please specify at least one field to update' }, { itemIndex });
+				}
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'PUT', url: `${baseUrl}/${projectId}`, body: updateFields, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'delete') {
+				const projectId = context.getNodeParameter('project_id', itemIndex) as string;
+				await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'DELETE', url: `${baseUrl}/${projectId}`, headers,
+				});
+				return { json: { success: true, additionalJson } };
+			}
+
+			throw new NodeApiError(context.getNode(), { message: `Unknown operation: ${operation}` }, { itemIndex });
+		}
+
+		// Process time-entries operations  
+		async function handleTimeEntries(context: IExecuteFunctions, operation: string, itemIndex: number, additionalJson: IDataObject): Promise<INodeExecutionData | INodeExecutionData[]> {
+			const credentials = await context.getCredentials('teamdeckApi');
+			const baseUrl = 'https://api.teamdeck.io/v1/time-entries';
+			const headers = { 'X-Api-Key': credentials.apiKey };
+
+			if (operation === 'getAll') {
+				const filters = context.getNodeParameter('filters', itemIndex, {});
+				const qs: any = {};
+				if (filters.start_date) qs.start_date_from = formatDate(filters.start_date.toString(), context);
+				if (filters.end_date) qs.start_date_to = formatDate(filters.end_date.toString(), context);
+				if (filters.project_id) qs.project_id = filters.project_id;
+				if (filters.resource_id) qs.resource_id = filters.resource_id;
+				const results = await getAllResults(context, 'time-entries', qs);
+				return results.map((result: any) => ({ json: { ...result, additionalJson } }));
+			}
+
+			if (operation === 'create') {
+				const body: IDataObject = {
+					project_id: context.getNodeParameter('project_id', itemIndex) as string,
+					resource_id: context.getNodeParameter('resource_id', itemIndex) as string,
+					minutes: context.getNodeParameter('minutes', itemIndex) as number,
+					description: context.getNodeParameter('description', itemIndex, '') as string,
+				};
+				
+				const startDate = context.getNodeParameter('start_date', itemIndex) as string;
+				const endDate = context.getNodeParameter('end_date', itemIndex) as string;
+				if (!startDate) throw new NodeApiError(context.getNode(), { message: 'Start date is required' }, { itemIndex });
+				if (!endDate) throw new NodeApiError(context.getNode(), { message: 'End date is required' }, { itemIndex });
+				
+				body.start_date = formatDate(startDate, context);
+				body.end_date = formatDate(endDate, context);
+
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'POST', url: baseUrl, body, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'get') {
+				const timeEntryId = context.getNodeParameter('timeEntryId', itemIndex) as string;
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'GET', url: `${baseUrl}/${timeEntryId}`, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'update') {
+				const timeEntryId = context.getNodeParameter('timeEntryId', itemIndex) as string;
+				const updateFields = context.getNodeParameter('updateFields', itemIndex, {}) as IDataObject;
+				if (Object.keys(updateFields).length === 0) {
+					throw new NodeApiError(context.getNode(), { message: 'Please specify at least one field to update' }, { itemIndex });
+				}
+				if (updateFields.start_date) updateFields.start_date = formatDate(updateFields.start_date as string, context);
+				if (updateFields.end_date) updateFields.end_date = formatDate(updateFields.end_date as string, context);
+				
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'PUT', url: `${baseUrl}/${timeEntryId}`, body: updateFields, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'delete') {
+				const timeEntryId = context.getNodeParameter('timeEntryId', itemIndex) as string;
+				await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'DELETE', url: `${baseUrl}/${timeEntryId}`, headers,
+				});
+				return { json: { success: true, additionalJson } };
+			}
+
+			throw new NodeApiError(context.getNode(), { message: `Unknown operation: ${operation}` }, { itemIndex });
+		}
+
+		// Process bookings operations
+		async function handleBookings(context: IExecuteFunctions, operation: string, itemIndex: number, additionalJson: IDataObject): Promise<INodeExecutionData | INodeExecutionData[]> {
+			const credentials = await context.getCredentials('teamdeckApi');
+			const baseUrl = 'https://api.teamdeck.io/v1/bookings';
+			const headers = { 'X-Api-Key': credentials.apiKey };
+
+			if (operation === 'getAll') {
+				const filters = context.getNodeParameter('filters', itemIndex, {});
+				const qs: any = {};
+				if (filters.start_date) qs.start_date_from = formatDate(filters.start_date.toString(), context);
+				if (filters.end_date) qs.start_date_to = formatDate(filters.end_date.toString(), context);
+				if (filters.project_id) qs.project_id = filters.project_id;
+				if (filters.resource_id) qs.resource_id = filters.resource_id;
+				const results = await getAllResults(context, 'bookings', qs);
+				return results.map((result: any) => ({ json: { ...result, additionalJson } }));
+			}
+
+			if (operation === 'create') {
+				const body: IDataObject = {
+					project_id: context.getNodeParameter('project_id', itemIndex) as string,
+					resource_id: context.getNodeParameter('resource_id', itemIndex) as string,
+				};
+				
+				const startDate = context.getNodeParameter('start_date', itemIndex) as string;
+				const endDate = context.getNodeParameter('end_date', itemIndex) as string;
+				if (!startDate) throw new NodeApiError(context.getNode(), { message: 'Start date is required' }, { itemIndex });
+				if (!endDate) throw new NodeApiError(context.getNode(), { message: 'End date is required' }, { itemIndex });
+				
+				body.start_date = formatDate(startDate, context);
+				body.end_date = formatDate(endDate, context);
+				
+				const additionalFields = context.getNodeParameter('additionalFields', itemIndex, {});
+				body.description = additionalFields.description || '';
+				body.time_fraction = additionalFields.time_fraction || 1;
+
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'POST', url: baseUrl, body, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'get') {
+				const bookingId = context.getNodeParameter('bookingId', itemIndex) as string;
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'GET', url: `${baseUrl}/${bookingId}`, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'update') {
+				const bookingId = context.getNodeParameter('bookingId', itemIndex) as string;
+				const updateFields = context.getNodeParameter('updateFields', itemIndex, {}) as IDataObject;
+				if (Object.keys(updateFields).length === 0) {
+					throw new NodeApiError(context.getNode(), { message: 'Please specify at least one field to update' }, { itemIndex });
+				}
+				if (updateFields.start_date) updateFields.start_date = formatDate(updateFields.start_date as string, context);
+				if (updateFields.end_date) updateFields.end_date = formatDate(updateFields.end_date as string, context);
+
+				const response = await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'PUT', url: `${baseUrl}/${bookingId}`, body: updateFields, headers, json: true,
+				});
+				return { json: { ...response.data || response, additionalJson } };
+			}
+
+			if (operation === 'delete') {
+				const bookingId = context.getNodeParameter('bookingId', itemIndex) as string;
+				await context.helpers.requestWithAuthentication.call(context, 'teamdeckApi', {
+					method: 'DELETE', url: `${baseUrl}/${bookingId}`, headers,
+				});
+				return { json: { success: true, additionalJson } };
+			}
+
+			throw new NodeApiError(context.getNode(), { message: `Unknown operation: ${operation}` }, { itemIndex });
+		}
+
+		// Main execution loop - clean and readable
 		try {
 			for (let i = 0; i < items.length; i++) {
 				try {
@@ -612,271 +1122,42 @@ export class Teamdeck implements INodeType {
 					const operation = this.getNodeParameter('operation', i) as string;
 					let additionalJson: IDataObject = {};
 					
-					try {
-						additionalJson = this.getNodeParameter('additionalJson', i) as IDataObject;
-					} catch (e) {
-						// If additionalJson is not provided, continue with empty object
-					}
-
-					if (resource === 'project') {
-						if (operation === 'getAll') {
-							const additionalFields = this.getNodeParameter('additionalFields', i, {});
-							const qs: any = { ...additionalFields };
-							const results = await getAllResults(this, 'projects', qs);
-							results.forEach((result) => {
-								returnData.push({
-									json: {
-										...result,
-										additionalJson,
-									},
-								});
-							});
-							continue;
-						}
-						else if (operation === 'create') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const name = this.getNodeParameter('name', i) as string;
-							const additionalFields = this.getNodeParameter('additionalFields', i, {});
-
-							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'POST',
-								url: 'https://api.teamdeck.io/v1/projects',
-								body: {
-									name,
-									...additionalFields,
-								},
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-								json: true,
-							});
-
-							item = {
-								json: {
-									...response.data || response,
-									additionalJson,
-								},
-							};
-						}
-						else if (operation === 'delete') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const project_id = this.getNodeParameter('project_id', i) as string;
-							
-							await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'DELETE',
-								url: `https://api.teamdeck.io/v1/projects/${project_id}`,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-							});
-
-							item = {
-								json: {
-									success: true,
-									additionalJson,
-								},
-							};
-						}
-						else if (operation === 'get') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const projectId = this.getNodeParameter('project_id', i) as string;
-
-							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'GET',
-								url: `https://api.teamdeck.io/v1/projects/${projectId}`,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-								json: true,
-							});
-
-							item = {
-								json: {
-									...response.data || response,
-									additionalJson,
-								},
-							};
-						}
-						else if (operation === 'update') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const projectId = this.getNodeParameter('project_id', i) as string;
-							const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-
-							if (Object.keys(updateFields).length === 0) {
-								throw new NodeApiError(this.getNode(), { message: 'Please specify at least one field to update' }, { itemIndex: i });
-							}
-
-							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'PUT',
-								url: `https://api.teamdeck.io/v1/projects/${projectId}`,
-								body: updateFields,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-								json: true,
-							});
-
-							item = {
-								json: {
-									...response.data || response,
-									additionalJson,
-								},
-							};
-						}
-					}
-					else if (resource === 'time-entries') {
-						if (operation === 'getAll') {
-							const filters = this.getNodeParameter('filters', i, {});
-							const qs: any = {};
-							
-							if (filters.start_date) {
-								qs.start_date_from = formatDate(filters.start_date.toString(), this);
-							}
-							if (filters.end_date) {
-								qs.start_date_to = formatDate(filters.end_date.toString(), this);
-							}
-							if (filters.project_id) {
-								qs.project_id = filters.project_id;
-							}
-							if (filters.resource_id) {
-								qs.resource_id = filters.resource_id;
-							}
-							
-							const results = await getAllResults(this, 'time-entries', qs);
-							results.forEach((result) => {
-								returnData.push({
-									json: {
-										...result,
-										additionalJson,
-									},
-								});
-							});
-							continue;
-						}
-						else if (operation === 'create') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							
-							const body: IDataObject = {
-								project_id: this.getNodeParameter('project_id', i) as string,
-								resource_id: this.getNodeParameter('resource_id', i) as string,
-							};
-							
-							const startDate = this.getNodeParameter('start_date', i) as string;
-							if (!startDate) {
-								throw new NodeApiError(this.getNode(), { message: 'Start date is required' }, { itemIndex: i });
-							}
-							body.start_date = formatDate(startDate, this);
-							
-							const endDate = this.getNodeParameter('end_date', i) as string;
-							if (!endDate) {
-								throw new NodeApiError(this.getNode(), { message: 'End date is required' }, { itemIndex: i });
-							}
-							body.end_date = formatDate(endDate, this);
-							
-							body.minutes = this.getNodeParameter('minutes', i) as number;
-							body.description = this.getNodeParameter('description', i, '') as string;
-
-							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'POST',
-								url: 'https://api.teamdeck.io/v1/time-entries',
-								body,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-								json: true,
-							});
-
-							item = {
-								json: {
-									...response.data || response,
-									additionalJson,
-								},
-							};
-						}
-						else if (operation === 'get') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
-
-							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'GET',
-								url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-								json: true,
-							});
-
-							item = {
-								json: {
-									...response.data || response,
-									additionalJson,
-								},
-							};
-						}
-						else if (operation === 'update') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
-							const updateFields = this.getNodeParameter('updateFields', i, {}) as IDataObject;
-
-							if (Object.keys(updateFields).length === 0) {
-								throw new NodeApiError(this.getNode(), { message: 'Please specify at least one field to update' }, { itemIndex: i });
-							}
-
-							// Format dates if they exist in updateFields
-							if (updateFields.start_date) {
-								updateFields.start_date = formatDate(updateFields.start_date as string, this);
-							}
-							if (updateFields.end_date) {
-								updateFields.end_date = formatDate(updateFields.end_date as string, this);
-							}
-
-							const response = await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'PUT',
-								url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
-								body: updateFields,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-								json: true,
-							});
-
-							item = {
-								json: {
-									...response.data || response,
-									additionalJson,
-								},
-							};
-						}
-						else if (operation === 'delete') {
-							const credentials = await this.getCredentials('teamdeckApi');
-							const timeEntryId = this.getNodeParameter('timeEntryId', i) as string;
-							
-							await this.helpers.requestWithAuthentication.call(this, 'teamdeckApi', {
-								method: 'DELETE',
-								url: `https://api.teamdeck.io/v1/time-entries/${timeEntryId}`,
-								headers: {
-									'X-Api-Key': credentials.apiKey,
-								},
-							});
-
-							item = {
-								json: {
-									success: true,
-									additionalJson,
-								},
-							};
+					// Check if additional JSON is enabled and get the data
+					const useAdditionalJson = this.getNodeParameter('useAdditionalJson', i, false) as boolean;
+					if (useAdditionalJson) {
+						try {
+							additionalJson = this.getNodeParameter('additionalJson', i) as IDataObject;
+						} catch (e) {
+							// If additionalJson is not provided, continue with empty object
 						}
 					}
 
-					// Verifica il risultato prima di aggiungerlo a returnData
-					if (item && item.json && !Object.values(item.json).every(v => v === undefined)) {
-						returnData.push(item);
+					let result: INodeExecutionData | INodeExecutionData[];
+
+					// Route to appropriate handler based on resource
+					switch (resource) {
+						case 'project':
+							result = await handleProject(this, operation, i, additionalJson);
+							break;
+						case 'time-entries':
+							result = await handleTimeEntries(this, operation, i, additionalJson);
+							break;
+						case 'bookings':
+							result = await handleBookings(this, operation, i, additionalJson);
+							break;
+						default:
+							throw new NodeApiError(this.getNode(), { message: `Unknown resource: ${resource}` }, { itemIndex: i });
+					}
+
+					// Handle both single results and arrays (from getAll operations)
+					if (Array.isArray(result)) {
+						result.forEach((item: INodeExecutionData) => returnData.push(item));
 					} else {
-						throw new NodeApiError(
-							this.getNode(),
-							{ message: 'Invalid API response received' },
-							{ itemIndex: i }
-						);
+						if (result && result.json && !Object.values(result.json).every(v => v === undefined)) {
+							returnData.push(result);
+						} else {
+							throw new NodeApiError(this.getNode(), { message: 'Invalid API response received' }, { itemIndex: i });
+						}
 					}
 
 				} catch (error) {
@@ -884,12 +1165,10 @@ export class Teamdeck implements INodeType {
 						const errorItem = {
 							json: {
 								error: error.message,
-								details: error.description || error.response?.body?.message || 
-										'The resource you are requesting could not be found',
+								details: error.description || error.response?.body?.message || 'The resource you are requesting could not be found',
 								statusCode: error.response?.statusCode,
 								itemIndex: i,
 								timestamp: new Date().toISOString(),
-								// Includi anche i dati originali dell'item che ha causato l'errore
 								originalItem: items[i].json,
 							},
 						};
@@ -900,22 +1179,18 @@ export class Teamdeck implements INodeType {
 				}
 			}
 			
-			// Se ci sono errori e continueOnFail è attivo, restituisci entrambi i branch
+			// Return results with proper error handling
 			if (errorData.length > 0) {
 				return [returnData, errorData];
 			}
-			
-			// Altrimenti restituisci solo il branch di successo
 			return [returnData];
 
 		} catch (error) {
 			if (this.continueOnFail()) {
-				// In caso di errore globale, includi informazioni dettagliate
 				const errorItem = {
 					json: {
 						error: error.message,
-						details: error.description || error.response?.body?.message || 
-								'The resource you are requesting could not be found',
+						details: error.description || error.response?.body?.message || 'The resource you are requesting could not be found',
 						statusCode: error.response?.statusCode,
 						timestamp: new Date().toISOString(),
 					},
